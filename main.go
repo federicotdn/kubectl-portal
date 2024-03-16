@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	nameHashLength        = 10
-	proxyPodContainerName = "nginx"
-	proxyPodImage         = "nginx"
-	proxyPodNameBase      = "kubectl-portal-nginx"
+	nameHashLength             = 10
+	proxyPodContainerName      = "nginx"
+	proxyPodImage              = "nginx"
+	proxyPodNameBase           = "kubectl-portal-nginx"
+	defaultPort           uint = 7070
 )
 
 type stringMap map[string]string
@@ -46,7 +47,10 @@ type Pod struct {
 
 type kubectlPortal struct {
 	proxyPodName string
-	namespace    string
+
+	namespace string
+	image     string
+	port      uint
 }
 
 type kubectlCmd struct {
@@ -117,7 +121,7 @@ func (kp *kubectlPortal) proxyPod() Pod {
 	pod.Spec.Containers = []Container{
 		{
 			Name:            proxyPodContainerName,
-			Image:           proxyPodImage,
+			Image:           kp.image,
 			ImagePullPolicy: "IfNotPresent",
 			Ports:           []Port{{ContainerPort: 80}},
 		},
@@ -173,7 +177,7 @@ func (kp *kubectlPortal) portForwardProxyPod() {
 	kc := newKubectl(
 		"port-forward",
 		proxyPodName(),
-		"8080:80",
+		fmt.Sprintf("%v:80", kp.port),
 	).namespace(kp.namespace)
 
 	cmd, err := kc.start()
@@ -181,7 +185,7 @@ func (kp *kubectlPortal) portForwardProxyPod() {
 		printErr("error: 'kubectl port-forward' failed: %s\n", err)
 	}
 
-	fmt.Println("kubectl port-forward now running...")
+	fmt.Printf("kubectl port-forward now running at localhost:%v\n", kp.port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -210,17 +214,19 @@ func (kp *kubectlPortal) run() {
 	kp.portForwardProxyPod()
 }
 
-func main() {
+func parseFlags(kp *kubectlPortal) {
 	help := false
-	namespace := ""
+
 	flags := pflag.NewFlagSet("kubectl-portal", pflag.ContinueOnError)
 	pflag.CommandLine = flags
 
 	configFlags := genericclioptions.ConfigFlags{
-		Namespace: &namespace,
+		Namespace: &kp.namespace,
 	}
 	configFlags.AddFlags(flags)
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
+	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
+	flags.StringVar(&kp.image, "portal-image", proxyPodImage, "Image to use for HTTP proxy")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
@@ -229,13 +235,15 @@ func main() {
 
 	if help {
 		fmt.Printf("Options:\n%v", flags.FlagUsages())
-		return
+		os.Exit(0)
 	}
+}
 
+func main() {
 	kp := &kubectlPortal{
 		proxyPodName: proxyPodName(),
-		namespace:    namespace,
 	}
+	parseFlags(kp)
 
 	kp.run()
 }
