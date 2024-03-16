@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	nameHashLength             = 10
-	proxyPodContainerName      = "nginx"
-	proxyPodImageVersion       = "1.0.0"
-	proxyPodImageBase          = "nginx"
-	proxyPodNameBase           = "kubectl-portal-nginx"
-	defaultPort           uint = 7070
+	nameHashLength               = 10
+	proxyPodContainerName        = "nginx"
+	proxyPodImageVersion         = "1.0.0"
+	proxyPodImageBase            = "federicotedin/kubectl-portal-nginx"
+	proxyPodImagePullPolicy      = "IfNotPresent"
+	proxyPodNameBase             = "kubectl-portal-nginx"
+	defaultPort             uint = 7070
 )
 
 type stringMap map[string]string
@@ -49,18 +50,14 @@ type Pod struct {
 type kubectlPortal struct {
 	proxyPodName string
 
-	namespace string
-	image     string
-	port      uint
+	namespace  string
+	image      string
+	pullPolicy string
+	port       uint
 }
 
 type kubectlCmd struct {
 	args []string
-}
-
-func printErr(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, format, a...)
-	os.Exit(1)
 }
 
 func newKubectl(args ...string) *kubectlCmd {
@@ -123,14 +120,14 @@ func (kp *kubectlPortal) proxyPod() Pod {
 		{
 			Name:            proxyPodContainerName,
 			Image:           kp.image,
-			ImagePullPolicy: "IfNotPresent",
+			ImagePullPolicy: kp.pullPolicy,
 			Ports:           []Port{{ContainerPort: 80}},
 		},
 	}
 	return pod
 }
 
-func (kp *kubectlPortal) deleteExistingProxyPod() {
+func (kp *kubectlPortal) deleteExistingProxyPod() error {
 	kc := newKubectl(
 		"delete",
 		"pod",
@@ -140,11 +137,12 @@ func (kp *kubectlPortal) deleteExistingProxyPod() {
 
 	out, err := kc.run(nil)
 	if err != nil {
-		printErr("error: 'kubectl delete pod' failed: %s\n%s", err, string(out))
+		return fmt.Errorf("'kubectl delete pod' failed: %w\n%v", err, string(out))
 	}
+	return nil
 }
 
-func (kp *kubectlPortal) createProxyPod() {
+func (kp *kubectlPortal) createProxyPod() error {
 	fmt.Println("creating proxy Pod...")
 
 	data, err := json.Marshal(kp.proxyPod())
@@ -155,11 +153,12 @@ func (kp *kubectlPortal) createProxyPod() {
 	kc := newKubectl("apply", "-f", "-").namespace(kp.namespace)
 	out, err := kc.run(data)
 	if err != nil {
-		printErr("error: 'kubectl apply' failed: %s\n%s", err, string(out))
+		return fmt.Errorf("'kubectl apply' failed: %w\n%v", err, string(out))
 	}
+	return nil
 }
 
-func (kp *kubectlPortal) waitForProxyPod() {
+func (kp *kubectlPortal) waitForProxyPod() error {
 	fmt.Println("waiting for proxy Pod to be ready...")
 
 	kc := newKubectl(
@@ -170,11 +169,12 @@ func (kp *kubectlPortal) waitForProxyPod() {
 
 	out, err := kc.run(nil)
 	if err != nil {
-		printErr("error: 'kubectl wait' failed: %s\n%s", err, string(out))
+		return fmt.Errorf("'kubectl wait' failed: %w\n%s", err, string(out))
 	}
+	return err
 }
 
-func (kp *kubectlPortal) portForwardProxyPod() {
+func (kp *kubectlPortal) portForwardProxyPod() error {
 	kc := newKubectl(
 		"port-forward",
 		proxyPodName(),
@@ -183,7 +183,7 @@ func (kp *kubectlPortal) portForwardProxyPod() {
 
 	cmd, err := kc.start()
 	if err != nil {
-		printErr("error: 'kubectl port-forward' failed: %s\n", err)
+		return fmt.Errorf("'kubectl port-forward' failed: %w\n", err)
 	}
 
 	fmt.Printf("kubectl port-forward now running at localhost:%v\n", kp.port)
@@ -196,26 +196,44 @@ func (kp *kubectlPortal) portForwardProxyPod() {
 
 	err = cmd.Process.Signal(os.Interrupt)
 	if err != nil {
-		printErr("error: interrupt 'kubectl port-forward' failed: %s\n", err)
+		return fmt.Errorf("interrupt 'kubectl port-forward' failed: %w\n", err)
 	}
 
 	err = cmd.Wait()
 	if err != nil {
-		printErr("error: wait 'kubectl port-forward' failed: %s\n", err)
+		return fmt.Errorf("wait 'kubectl port-forward' failed: %w\n", err)
 	}
+
+	return nil
 }
 
-func (kp *kubectlPortal) run() {
-	kp.deleteExistingProxyPod()
+func (kp *kubectlPortal) run() error {
+	err := kp.deleteExistingProxyPod()
+	if err != nil {
+		return err
+	}
 
-	kp.createProxyPod()
-	defer kp.deleteExistingProxyPod()
+	err = kp.createProxyPod()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err2 := kp.deleteExistingProxyPod()
+		// TODO: Group errors
+		if err == nil {
+			err = err2
+		}
+	}()
 
-	kp.waitForProxyPod()
-	kp.portForwardProxyPod()
+	err = kp.waitForProxyPod()
+	if err != nil {
+		return err
+	}
+	err = kp.portForwardProxyPod()
+	return err
 }
 
-func parseFlags(kp *kubectlPortal) {
+func parseFlags(kp *kubectlPortal) error {
 	help := false
 	defaultImage := fmt.Sprintf("%v:%v", proxyPodImageBase, proxyPodImageVersion)
 	defaultPodName := proxyPodName()
@@ -231,21 +249,32 @@ func parseFlags(kp *kubectlPortal) {
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
 	flags.StringVar(&kp.image, "portal-image", defaultImage, "Image to use for HTTP proxy")
 	flags.StringVar(&kp.proxyPodName, "portal-name", defaultPodName, "Pod name to use for HTTP proxy")
+	flags.StringVar(&kp.pullPolicy, "portal-pull-policy", proxyPodImagePullPolicy, "Image pull policy to use for HTTP proxy")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
-		printErr("error: %v\nSee 'kubectl portal --help' for usage.\n", err)
+		return fmt.Errorf("%w\nSee 'kubectl portal --help' for usage.\n", err)
 	}
 
 	if help {
 		fmt.Printf("Options:\n%v", flags.FlagUsages())
 		os.Exit(0)
 	}
+
+	return nil
 }
 
 func main() {
 	kp := &kubectlPortal{}
-	parseFlags(kp)
+	err := parseFlags(kp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v", err)
+		os.Exit(1)
+	}
 
-	kp.run()
+	err = kp.run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v", err)
+		os.Exit(1)
+	}
 }
