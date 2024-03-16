@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	nameHashLength   = 10
-	nginxPodNameBase = "kubectl-portal-nginx"
+	nameHashLength        = 10
+	proxyPodContainerName = "nginx"
+	proxyPodImage         = "nginx"
+	proxyPodNameBase      = "kubectl-portal-nginx"
 )
 
 type stringMap map[string]string
@@ -83,7 +85,7 @@ func (kc *kubectlCmd) start() (*exec.Cmd, error) {
 	return cmd, cmd.Start()
 }
 
-func nginxPodName() string {
+func proxyPodName() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		panic(fmt.Sprintf("eror: unable to retrieve hostname: %v", err))
@@ -96,21 +98,21 @@ func nginxPodName() string {
 	h := sha256.New()
 	h.Write([]byte(user.Name + "@" + hostname))
 	hash := hex.EncodeToString(h.Sum(nil))
-	return nginxPodNameBase + "-" + hash[:nameHashLength]
+	return proxyPodNameBase + "-" + hash[:nameHashLength]
 }
 
-func nginxPod() Pod {
+func proxyPod() Pod {
 	pod := Pod{
 		ApiVersion: "v1",
 		Kind:       "Pod",
 		Metadata: stringMap{
-			"name": nginxPodName(),
+			"name": proxyPodName(),
 		},
 	}
 	pod.Spec.Containers = []Container{
 		{
-			Name:            "nginx",
-			Image:           "nginx",
+			Name:            proxyPodContainerName,
+			Image:           proxyPodImage,
 			ImagePullPolicy: "IfNotPresent",
 			Ports:           []Port{{ContainerPort: 80}},
 		},
@@ -118,11 +120,11 @@ func nginxPod() Pod {
 	return pod
 }
 
-func deleteExistingNginxPod(namespace string) {
+func deleteExistingProxyPod(namespace string) {
 	kc := newKubectl(
 		"delete",
 		"pod",
-		nginxPodName(),
+		proxyPodName(),
 		"--ignore-not-found",
 	).namespace(namespace)
 
@@ -132,10 +134,10 @@ func deleteExistingNginxPod(namespace string) {
 	}
 }
 
-func createNginxPod(namespace string) {
-	fmt.Println("creating nginx Pod...")
+func createProxyPod(namespace string) {
+	fmt.Println("creating proxy Pod...")
 
-	data, err := json.Marshal(nginxPod())
+	data, err := json.Marshal(proxyPod())
 	if err != nil {
 		panic(fmt.Sprintf("error: unable to marshal Pod data: %s", err))
 	}
@@ -147,13 +149,13 @@ func createNginxPod(namespace string) {
 	}
 }
 
-func waitForNginxPod(namespace string) {
-	fmt.Println("waiting for nginx Pod to be ready...")
+func waitForProxyPod(namespace string) {
+	fmt.Println("waiting for proxy Pod to be ready...")
 
 	kc := newKubectl(
 		"wait",
 		"--for=condition=Ready",
-		"pod/"+nginxPodName(),
+		"pod/"+proxyPodName(),
 	).namespace(namespace)
 
 	out, err := kc.run(nil)
@@ -162,10 +164,10 @@ func waitForNginxPod(namespace string) {
 	}
 }
 
-func portForwardNginxPod(namespace string) {
+func portForwardProxyPod(namespace string) {
 	kc := newKubectl(
 		"port-forward",
-		nginxPodName(),
+		proxyPodName(),
 		"8080:80",
 	).namespace(namespace)
 
@@ -215,9 +217,9 @@ func main() {
 		return
 	}
 
-	deleteExistingNginxPod(namespace)
-	createNginxPod(namespace)
-	waitForNginxPod(namespace)
-	portForwardNginxPod(namespace)
-	deleteExistingNginxPod(namespace)
+	deleteExistingProxyPod(namespace)
+	createProxyPod(namespace)
+	waitForProxyPod(namespace)
+	portForwardProxyPod(namespace)
+	deleteExistingProxyPod(namespace)
 }
