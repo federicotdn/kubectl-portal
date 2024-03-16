@@ -18,7 +18,8 @@ import (
 const (
 	nameHashLength             = 10
 	proxyPodContainerName      = "nginx"
-	proxyPodImage              = "nginx"
+	proxyPodImageVersion       = "1.0.0"
+	proxyPodImageBase          = "nginx"
 	proxyPodNameBase           = "kubectl-portal-nginx"
 	defaultPort           uint = 7070
 )
@@ -216,6 +217,7 @@ func (kp *kubectlPortal) run() {
 
 func parseFlags(kp *kubectlPortal) {
 	help := false
+	defaultImage := fmt.Sprintf("%v:%v", proxyPodImageBase, proxyPodImageVersion)
 
 	flags := pflag.NewFlagSet("kubectl-portal", pflag.ContinueOnError)
 	pflag.CommandLine = flags
@@ -226,7 +228,7 @@ func parseFlags(kp *kubectlPortal) {
 	configFlags.AddFlags(flags)
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
-	flags.StringVar(&kp.image, "portal-image", proxyPodImage, "Image to use for HTTP proxy")
+	flags.StringVar(&kp.image, "portal-image", defaultImage, "Image to use for HTTP proxy")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
