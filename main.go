@@ -44,6 +44,11 @@ type Pod struct {
 	} `json:"spec"`
 }
 
+type kubectlPortal struct {
+	proxyPodName string
+	namespace    string
+}
+
 type kubectlCmd struct {
 	args []string
 }
@@ -101,12 +106,12 @@ func proxyPodName() string {
 	return proxyPodNameBase + "-" + hash[:nameHashLength]
 }
 
-func proxyPod() Pod {
+func (kp *kubectlPortal) proxyPod() Pod {
 	pod := Pod{
 		ApiVersion: "v1",
 		Kind:       "Pod",
 		Metadata: stringMap{
-			"name": proxyPodName(),
+			"name": kp.proxyPodName,
 		},
 	}
 	pod.Spec.Containers = []Container{
@@ -120,13 +125,13 @@ func proxyPod() Pod {
 	return pod
 }
 
-func deleteExistingProxyPod(namespace string) {
+func (kp *kubectlPortal) deleteExistingProxyPod() {
 	kc := newKubectl(
 		"delete",
 		"pod",
 		proxyPodName(),
 		"--ignore-not-found",
-	).namespace(namespace)
+	).namespace(kp.namespace)
 
 	out, err := kc.run(nil)
 	if err != nil {
@@ -134,29 +139,29 @@ func deleteExistingProxyPod(namespace string) {
 	}
 }
 
-func createProxyPod(namespace string) {
+func (kp *kubectlPortal) createProxyPod() {
 	fmt.Println("creating proxy Pod...")
 
-	data, err := json.Marshal(proxyPod())
+	data, err := json.Marshal(kp.proxyPod())
 	if err != nil {
 		panic(fmt.Sprintf("error: unable to marshal Pod data: %s", err))
 	}
 
-	kc := newKubectl("apply", "-f", "-").namespace(namespace)
+	kc := newKubectl("apply", "-f", "-").namespace(kp.namespace)
 	out, err := kc.run(data)
 	if err != nil {
 		printErr("error: 'kubectl apply' failed: %s\n%s", err, string(out))
 	}
 }
 
-func waitForProxyPod(namespace string) {
+func (kp *kubectlPortal) waitForProxyPod() {
 	fmt.Println("waiting for proxy Pod to be ready...")
 
 	kc := newKubectl(
 		"wait",
 		"--for=condition=Ready",
 		"pod/"+proxyPodName(),
-	).namespace(namespace)
+	).namespace(kp.namespace)
 
 	out, err := kc.run(nil)
 	if err != nil {
@@ -164,12 +169,12 @@ func waitForProxyPod(namespace string) {
 	}
 }
 
-func portForwardProxyPod(namespace string) {
+func (kp *kubectlPortal) portForwardProxyPod() {
 	kc := newKubectl(
 		"port-forward",
 		proxyPodName(),
 		"8080:80",
-	).namespace(namespace)
+	).namespace(kp.namespace)
 
 	cmd, err := kc.start()
 	if err != nil {
@@ -195,6 +200,16 @@ func portForwardProxyPod(namespace string) {
 	}
 }
 
+func (kp *kubectlPortal) run() {
+	kp.deleteExistingProxyPod()
+
+	kp.createProxyPod()
+	defer kp.deleteExistingProxyPod()
+
+	kp.waitForProxyPod()
+	kp.portForwardProxyPod()
+}
+
 func main() {
 	help := false
 	namespace := ""
@@ -217,9 +232,10 @@ func main() {
 		return
 	}
 
-	deleteExistingProxyPod(namespace)
-	createProxyPod(namespace)
-	waitForProxyPod(namespace)
-	portForwardProxyPod(namespace)
-	deleteExistingProxyPod(namespace)
+	kp := &kubectlPortal{
+		proxyPodName: proxyPodName(),
+		namespace:    namespace,
+	}
+
+	kp.run()
 }
