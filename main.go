@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"os/signal"
+	"os/user"
 
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -27,9 +27,10 @@ type Port struct {
 }
 
 type Container struct {
-	Name  string `json:"name"`
-	Image string `json:"image"`
-	Ports []Port `json:"ports"`
+	Name            string `json:"name"`
+	Image           string `json:"image"`
+	ImagePullPolicy string `json:"imagePullPolicy"`
+	Ports           []Port `json:"ports"`
 }
 
 type Pod struct {
@@ -108,9 +109,10 @@ func nginxPod() Pod {
 	}
 	pod.Spec.Containers = []Container{
 		{
-			Name:  "nginx",
-			Image: "nginx",
-			Ports: []Port{{ContainerPort: 80}},
+			Name:            "nginx",
+			Image:           "nginx",
+			ImagePullPolicy: "IfNotPresent",
+			Ports:           []Port{{ContainerPort: 80}},
 		},
 	}
 	return pod
@@ -131,6 +133,8 @@ func deleteExistingNginxPod(namespace string) {
 }
 
 func createNginxPod(namespace string) {
+	fmt.Println("creating nginx Pod...")
+
 	data, err := json.Marshal(nginxPod())
 	if err != nil {
 		panic(fmt.Sprintf("error: unable to marshal Pod data: %s", err))
@@ -144,10 +148,12 @@ func createNginxPod(namespace string) {
 }
 
 func waitForNginxPod(namespace string) {
+	fmt.Println("waiting for nginx Pod to be ready...")
+
 	kc := newKubectl(
 		"wait",
 		"--for=condition=Ready",
-		"pod/" + nginxPodName(),
+		"pod/"+nginxPodName(),
 	).namespace(namespace)
 
 	out, err := kc.run(nil)
@@ -188,8 +194,6 @@ func portForwardNginxPod(namespace string) {
 }
 
 func main() {
-	fmt.Println("starting")
-
 	help := false
 	namespace := ""
 	flags := pflag.NewFlagSet("kubectl-portal", pflag.ContinueOnError)
