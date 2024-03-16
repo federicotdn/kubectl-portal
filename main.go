@@ -218,6 +218,7 @@ func (kp *kubectlPortal) run() {
 func parseFlags(kp *kubectlPortal) {
 	help := false
 	defaultImage := fmt.Sprintf("%v:%v", proxyPodImageBase, proxyPodImageVersion)
+	defaultPodName := proxyPodName()
 
 	flags := pflag.NewFlagSet("kubectl-portal", pflag.ContinueOnError)
 	pflag.CommandLine = flags
@@ -229,6 +230,7 @@ func parseFlags(kp *kubectlPortal) {
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
 	flags.StringVar(&kp.image, "portal-image", defaultImage, "Image to use for HTTP proxy")
+	flags.StringVar(&kp.proxyPodName, "portal-name", defaultPodName, "Pod name to use for HTTP proxy")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
@@ -242,9 +244,7 @@ func parseFlags(kp *kubectlPortal) {
 }
 
 func main() {
-	kp := &kubectlPortal{
-		proxyPodName: proxyPodName(),
-	}
+	kp := &kubectlPortal{}
 	parseFlags(kp)
 
 	kp.run()
