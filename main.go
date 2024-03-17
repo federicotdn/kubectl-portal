@@ -19,7 +19,6 @@ import (
 
 const (
 	nameHashLength                = 10
-	proxyPodContainerName         = "proxy"
 	proxyPodImage                 = "openresty/openresty:1.21.4.1-0-jammy"
 	proxyPodImagePullPolicy       = "IfNotPresent"
 	proxyResourceNameBase         = "kubectl-portal-proxy"
@@ -161,7 +160,7 @@ func (kp *kubectlPortal) proxyPod() Pod {
 	pod.Resource.Metadata.Name = kp.proxyResourceName
 	pod.Spec.Containers = []Container{
 		{
-			Name:            proxyPodContainerName,
+			Name:            "proxy",
 			Image:           kp.image,
 			ImagePullPolicy: kp.pullPolicy,
 			Ports:           []Port{{ContainerPort: 80}},
