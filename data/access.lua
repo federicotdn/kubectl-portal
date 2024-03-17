@@ -1,6 +1,9 @@
 -- Read the cluster domain from environment
 local cluster_domain = os.getenv("KUBECTL_PORTAL_CLUSTER_DOMAIN")
 
+-- Read the namespace from the environment
+local namespace = os.getenv("KUBECTL_PORTAL_NAMESPACE")
+
 -- Figure out what the Host value looks like
 -- Options:
 -- 1. my-service (assume the same namespace)
@@ -19,13 +22,6 @@ local _, c = string.gsub(host, "%.", "")
 
 if c == 0 then
   -- Option 1
-
-  -- Retrieve the current Kubernetes namespace
-  local path = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-  local f = assert(io.open(path, "rb"))
-  local namespace = f:read("*all")
-  f:close()
-
   ngx.req.set_header("Host", host .. "." .. namespace .. ".svc." .. cluster_domain)
 elseif c == 1 then
   -- Option 2

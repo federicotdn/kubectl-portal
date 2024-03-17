@@ -17,21 +17,23 @@ import (
 )
 
 const (
-	nameHashLength               = 10
-	proxyPodContainerName        = "proxy"
-	proxyPodImage                = "openresty/openresty:1.21.4.1-0-jammy"
-	proxyPodImagePullPolicy      = "IfNotPresent"
-	proxyResourceNameBase        = "kubectl-portal-proxy"
-	proxyVolumeName              = "proxy-volume"
-	proxyClusterDomainEnv        = "KUBECTL_PORTAL_CLUSTER_DOMAIN"
-	defaultPort             uint = 7070
-	defaultClusterDomain         = "cluster.local"
+	nameHashLength                = 10
+	proxyPodContainerName         = "proxy"
+	proxyPodImage                 = "openresty/openresty:1.21.4.1-0-jammy"
+	proxyPodImagePullPolicy       = "IfNotPresent"
+	proxyResourceNameBase         = "kubectl-portal-proxy"
+	proxyVolumeName               = "proxy-volume"
+	proxyClusterDomainEnv         = "KUBECTL_PORTAL_CLUSTER_DOMAIN"
+	proxyClusterNamespaceEnv      = "KUBECTL_PORTAL_NAMESPACE"
+	defaultPort              uint = 7070
+	defaultClusterDomain          = "cluster.local"
 )
 
 //go:embed data
 var data embed.FS
 
 type stringMap map[string]string
+type anyMap map[string]any
 
 type Resource struct {
 	ApiVersion string `json:"apiVersion"`
@@ -45,13 +47,19 @@ type Port struct {
 	ContainerPort int `json:"containerPort"`
 }
 
+type EnvVal struct {
+	Name      string `json:"name"`
+	Value     string `json:"value,omitempty"`
+	ValueFrom any    `json:"valueFrom,omitempty"`
+}
+
 type Container struct {
 	Name            string      `json:"name"`
 	Image           string      `json:"image"`
 	ImagePullPolicy string      `json:"imagePullPolicy"`
 	Ports           []Port      `json:"ports"`
 	VolumeMounts    []stringMap `json:"volumeMounts"`
-	Env             []stringMap `json:"env"`
+	Env             []EnvVal    `json:"env"`
 }
 
 type Volume struct {
@@ -171,8 +179,11 @@ func (kp *kubectlPortal) proxyPod() Pod {
 					"subPath":   "nginx.conf",
 				},
 			},
-			Env: []stringMap{
-				{"name": proxyClusterDomainEnv, "value": kp.clusterDomain},
+			Env: []EnvVal{
+				{Name: proxyClusterDomainEnv, Value: kp.clusterDomain},
+				{Name: proxyClusterNamespaceEnv, ValueFrom: anyMap{
+					"fieldRef": stringMap{"fieldPath": "metadata.namespace"},
+				}},
 			},
 		},
 	}
