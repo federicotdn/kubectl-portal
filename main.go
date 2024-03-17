@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -327,11 +328,8 @@ func (kp *kubectlPortal) run() error {
 	defer func() {
 		kp.printf("Cleaning up...\n")
 
-		err2 := kp.deleteProxyResources()
-		// TODO: Group errors
-		if err == nil {
-			err = err2
-		}
+		deleteErr := kp.deleteProxyResources()
+		err = errors.Join(err, deleteErr)
 	}()
 
 	err = kp.waitForProxyPod()
