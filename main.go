@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,49 +18,78 @@ import (
 
 const (
 	nameHashLength               = 10
-	proxyPodContainerName        = "nginx"
-	proxyPodImageVersion         = "1.0.0"
-	proxyPodImageBase            = "federicotedin/kubectl-portal-nginx"
+	proxyPodContainerName        = "proxy"
+	proxyPodImage                = "openresty/openresty:1.21.4.1-0-jammy"
 	proxyPodImagePullPolicy      = "IfNotPresent"
-	proxyPodNameBase             = "kubectl-portal-nginx"
+	proxyResourceNameBase        = "kubectl-portal-proxy"
+	proxyVolumeName              = "proxy-volume"
 	defaultPort             uint = 7070
 	defaultClusterDomain         = "cluster.local"
 )
 
+//go:embed data
+var data embed.FS
+
 type stringMap map[string]string
+
+type Resource struct {
+	ApiVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
+}
 
 type Port struct {
 	ContainerPort int `json:"containerPort"`
 }
 
 type Container struct {
-	Name            string `json:"name"`
-	Image           string `json:"image"`
-	ImagePullPolicy string `json:"imagePullPolicy"`
-	Ports           []Port `json:"ports"`
+	Name            string      `json:"name"`
+	Image           string      `json:"image"`
+	ImagePullPolicy string      `json:"imagePullPolicy"`
+	Ports           []Port      `json:"ports"`
+	VolumeMounts    []stringMap `json:"volumeMounts"`
+}
+
+type Volume struct {
+	Name      string    `json:"name"`
+	ConfigMap stringMap `json:"configMap"`
 }
 
 type Pod struct {
-	ApiVersion string    `json:"apiVersion"`
-	Kind       string    `json:"kind"`
-	Metadata   stringMap `json:"metadata"`
-	Spec       struct {
+	Resource
+	Spec struct {
 		Containers []Container `json:"containers"`
+		Volumes    []Volume    `json:"volumes"`
 	} `json:"spec"`
 }
 
+type ConfigMap struct {
+	Resource
+	Data stringMap `json:"data"`
+}
+
 type kubectlPortal struct {
-	proxyPodName  string
-	image         string
-	pullPolicy    string
-	port          uint
-	clusterDomain string
+	proxyResourceName string
+	image             string
+	pullPolicy        string
+	port              uint
+	clusterDomain     string
 
 	namespace string
 }
 
 type kubectlCmd struct {
 	args []string
+}
+
+func readEmbeddedFile(fileName string) string {
+	data, err := data.ReadFile(fileName)
+	if err != nil {
+		panic(fmt.Sprintf("error: unable to read embedded file: %v", err))
+	}
+	return string(data)
 }
 
 func newKubectl(args ...string) *kubectlCmd {
@@ -94,66 +124,102 @@ func (kc *kubectlCmd) start() (*exec.Cmd, error) {
 	return cmd, cmd.Start()
 }
 
-func proxyPodName() string {
+func proxyResourceName() string {
 	hostname, err := os.Hostname()
 	if err != nil {
-		panic(fmt.Sprintf("eror: unable to retrieve hostname: %v", err))
+		panic(fmt.Sprintf("error: unable to retrieve hostname: %v", err))
 	}
 	user, err := user.Current()
 	if err != nil {
-		panic(fmt.Sprintf("eror: unable to retrieve user: %v", err))
+		panic(fmt.Sprintf("error: unable to retrieve user: %v", err))
 	}
 
 	h := sha256.New()
 	h.Write([]byte(user.Name + "@" + hostname))
 	hash := hex.EncodeToString(h.Sum(nil))
-	return proxyPodNameBase + "-" + hash[:nameHashLength]
+	return proxyResourceNameBase + "-" + hash[:nameHashLength]
 }
 
 func (kp *kubectlPortal) proxyPod() Pod {
 	pod := Pod{
-		ApiVersion: "v1",
-		Kind:       "Pod",
-		Metadata: stringMap{
-			"name": kp.proxyPodName,
-		},
+		Resource: Resource{ApiVersion: "v1", Kind: "Pod"},
 	}
+	pod.Resource.Metadata.Name = kp.proxyResourceName
 	pod.Spec.Containers = []Container{
 		{
 			Name:            proxyPodContainerName,
 			Image:           kp.image,
 			ImagePullPolicy: kp.pullPolicy,
 			Ports:           []Port{{ContainerPort: 80}},
+			VolumeMounts: []stringMap{
+				{
+					"mountPath": "/etc/nginx/conf.d/default.conf",
+					"name":      proxyVolumeName,
+					"subPath":   "default.conf",
+				},
+				{
+					"mountPath": "/app/access.lua",
+					"name":      proxyVolumeName,
+					"subPath":   "access.lua",
+				},
+			},
+		},
+	}
+	pod.Spec.Volumes = []Volume{
+		{
+			Name:      proxyVolumeName,
+			ConfigMap: stringMap{"name": kp.proxyResourceName},
 		},
 	}
 	return pod
 }
 
-func (kp *kubectlPortal) deleteExistingProxyPod() error {
+func (kp *kubectlPortal) proxyConfigMap() ConfigMap {
+	config := ConfigMap{
+		Resource: Resource{ApiVersion: "v1", Kind: "ConfigMap"},
+		Data:     make(stringMap),
+	}
+	config.Resource.Metadata.Name = kp.proxyResourceName
+	config.Data["access.lua"] = readEmbeddedFile("data/access.lua")
+	config.Data["default.conf"] = readEmbeddedFile("data/default.conf")
+	return config
+}
+
+func (kp *kubectlPortal) deleteProxyResources() error {
 	kc := newKubectl(
 		"delete",
-		"pod",
-		proxyPodName(),
+		"pod,configmap",
+		proxyResourceName(),
 		"--ignore-not-found",
 	).namespace(kp.namespace)
 
 	out, err := kc.run(nil)
 	if err != nil {
-		return fmt.Errorf("'kubectl delete pod' failed: %w\n%v", err, string(out))
+		return fmt.Errorf("'kubectl delete' failed: %w\n%v", err, string(out))
 	}
 	return nil
 }
 
-func (kp *kubectlPortal) createProxyPod() error {
-	fmt.Println("creating proxy Pod...")
+func (kp *kubectlPortal) createProxyResources() error {
+	fmt.Println("creating proxy resources...")
 
-	data, err := json.Marshal(kp.proxyPod())
+	buf := bytes.Buffer{}
+	enc := json.NewEncoder(&buf)
+
+	err := enc.Encode(kp.proxyPod())
 	if err != nil {
 		panic(fmt.Sprintf("error: unable to marshal Pod data: %s", err))
 	}
 
+	buf.WriteString("\n")
+
+	err = enc.Encode(kp.proxyConfigMap())
+	if err != nil {
+		panic(fmt.Sprintf("error: unable to marshal ConfigMap data: %s", err))
+	}
+
 	kc := newKubectl("apply", "-f", "-").namespace(kp.namespace)
-	out, err := kc.run(data)
+	out, err := kc.run(buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("'kubectl apply' failed: %w\n%v", err, string(out))
 	}
@@ -166,7 +232,7 @@ func (kp *kubectlPortal) waitForProxyPod() error {
 	kc := newKubectl(
 		"wait",
 		"--for=condition=Ready",
-		"pod/"+proxyPodName(),
+		"pod/"+proxyResourceName(),
 	).namespace(kp.namespace)
 
 	out, err := kc.run(nil)
@@ -179,7 +245,7 @@ func (kp *kubectlPortal) waitForProxyPod() error {
 func (kp *kubectlPortal) portForwardProxyPod() error {
 	kc := newKubectl(
 		"port-forward",
-		proxyPodName(),
+		proxyResourceName(),
 		fmt.Sprintf("%v:80", kp.port),
 	).namespace(kp.namespace)
 
@@ -210,17 +276,17 @@ func (kp *kubectlPortal) portForwardProxyPod() error {
 }
 
 func (kp *kubectlPortal) run() error {
-	err := kp.deleteExistingProxyPod()
+	err := kp.deleteProxyResources()
 	if err != nil {
 		return err
 	}
 
-	err = kp.createProxyPod()
+	err = kp.createProxyResources()
 	if err != nil {
 		return err
 	}
 	defer func() {
-		err2 := kp.deleteExistingProxyPod()
+		err2 := kp.deleteProxyResources()
 		// TODO: Group errors
 		if err == nil {
 			err = err2
@@ -237,8 +303,7 @@ func (kp *kubectlPortal) run() error {
 
 func parseFlags(kp *kubectlPortal) error {
 	help := false
-	defaultImage := fmt.Sprintf("%v:%v", proxyPodImageBase, proxyPodImageVersion)
-	defaultPodName := proxyPodName()
+	defaultResourceName := proxyResourceName()
 
 	flags := pflag.NewFlagSet("kubectl-portal", pflag.ContinueOnError)
 	pflag.CommandLine = flags
@@ -249,8 +314,8 @@ func parseFlags(kp *kubectlPortal) error {
 	configFlags.AddFlags(flags)
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
-	flags.StringVar(&kp.image, "portal-image", defaultImage, "Image to use for HTTP proxy")
-	flags.StringVar(&kp.proxyPodName, "portal-name", defaultPodName, "Pod name to use for HTTP proxy")
+	flags.StringVar(&kp.image, "portal-image", proxyPodImage, "Image to use for HTTP proxy")
+	flags.StringVar(&kp.proxyResourceName, "portal-name", defaultResourceName, "Pod/ConfigMap name to use for HTTP proxy")
 	flags.StringVar(&kp.pullPolicy, "portal-pull-policy", proxyPodImagePullPolicy, "Image pull policy to use for HTTP proxy")
 	flags.StringVar(&kp.clusterDomain, "portal-cluster-domain", defaultClusterDomain, "Cluster domain to use in HTTP proxy DNS resolution")
 
