@@ -78,6 +78,7 @@ type kubectlPortal struct {
 	clusterDomain     string
 
 	namespace string
+	verbose   bool
 }
 
 type kubectlCmd struct {
@@ -87,7 +88,7 @@ type kubectlCmd struct {
 func readEmbeddedFile(fileName string) string {
 	data, err := data.ReadFile(fileName)
 	if err != nil {
-		panic(fmt.Sprintf("error: unable to read embedded file: %v", err))
+		panicf("error: unable to read embedded file: %v", err)
 	}
 	return string(data)
 }
@@ -127,11 +128,11 @@ func (kc *kubectlCmd) start() (*exec.Cmd, error) {
 func proxyResourceName() string {
 	hostname, err := os.Hostname()
 	if err != nil {
-		panic(fmt.Sprintf("error: unable to retrieve hostname: %v", err))
+		panicf("error: unable to retrieve hostname: %v", err)
 	}
 	user, err := user.Current()
 	if err != nil {
-		panic(fmt.Sprintf("error: unable to retrieve user: %v", err))
+		panicf("error: unable to retrieve user: %v", err)
 	}
 
 	h := sha256.New()
@@ -186,6 +187,8 @@ func (kp *kubectlPortal) proxyConfigMap() ConfigMap {
 }
 
 func (kp *kubectlPortal) deleteProxyResources() error {
+	kp.vprintf("deleting proxy resources...\n")
+
 	kc := newKubectl(
 		"delete",
 		"pod,configmap",
@@ -201,21 +204,21 @@ func (kp *kubectlPortal) deleteProxyResources() error {
 }
 
 func (kp *kubectlPortal) createProxyResources() error {
-	fmt.Println("creating proxy resources...")
+	kp.printf("creating proxy resources...\n")
 
 	buf := bytes.Buffer{}
 	enc := json.NewEncoder(&buf)
 
 	err := enc.Encode(kp.proxyPod())
 	if err != nil {
-		panic(fmt.Sprintf("error: unable to marshal Pod data: %s", err))
+		panicf("error: unable to marshal Pod data: %s", err)
 	}
 
 	buf.WriteString("\n")
 
 	err = enc.Encode(kp.proxyConfigMap())
 	if err != nil {
-		panic(fmt.Sprintf("error: unable to marshal ConfigMap data: %s", err))
+		panicf("error: unable to marshal ConfigMap data: %s", err)
 	}
 
 	kc := newKubectl("apply", "-f", "-").namespace(kp.namespace)
@@ -227,7 +230,7 @@ func (kp *kubectlPortal) createProxyResources() error {
 }
 
 func (kp *kubectlPortal) waitForProxyPod() error {
-	fmt.Println("waiting for proxy Pod to be ready...")
+	kp.printf("waiting for proxy to be ready...\n")
 
 	kc := newKubectl(
 		"wait",
@@ -254,7 +257,7 @@ func (kp *kubectlPortal) portForwardProxyPod() error {
 		return fmt.Errorf("'kubectl port-forward' failed: %w\n", err)
 	}
 
-	fmt.Printf("kubectl port-forward now running at localhost:%v\n", kp.port)
+	kp.printf("kubectl port-forward now running at localhost:%v\n", kp.port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -301,6 +304,25 @@ func (kp *kubectlPortal) run() error {
 	return err
 }
 
+func panicf(format string, a ...any) {
+	panic(fmt.Sprintf(format, a...))
+}
+
+func (kp *kubectlPortal) eprintf(err error) {
+	fmt.Fprintf(os.Stderr, "error: %v", err)
+	os.Exit(1)
+}
+
+func (kp *kubectlPortal) printf(format string, a ...any) {
+	fmt.Printf(format, a...)
+}
+
+func (kp *kubectlPortal) vprintf(format string, a ...any) {
+	if kp.verbose {
+		kp.printf(format, a...)
+	}
+}
+
 func parseFlags(kp *kubectlPortal) error {
 	help := false
 	defaultResourceName := proxyResourceName()
@@ -313,6 +335,7 @@ func parseFlags(kp *kubectlPortal) error {
 	}
 	configFlags.AddFlags(flags)
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
+	flags.BoolVar(&kp.verbose, "portal-verbose", false, "Enable verbose mode for kubectl-portal")
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
 	flags.StringVar(&kp.image, "portal-image", proxyPodImage, "Image to use for HTTP proxy")
 	flags.StringVar(&kp.proxyResourceName, "portal-name", defaultResourceName, "Pod/ConfigMap name to use for HTTP proxy")
@@ -336,13 +359,11 @@ func main() {
 	kp := &kubectlPortal{}
 	err := parseFlags(kp)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v", err)
-		os.Exit(1)
+		kp.eprintf(err)
 	}
 
 	err = kp.run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v", err)
-		os.Exit(1)
+		kp.eprintf(err)
 	}
 }
