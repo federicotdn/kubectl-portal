@@ -23,6 +23,7 @@ const (
 	proxyPodImagePullPolicy      = "IfNotPresent"
 	proxyPodNameBase             = "kubectl-portal-nginx"
 	defaultPort             uint = 7070
+	defaultClusterDomain         = "cluster.local"
 )
 
 type stringMap map[string]string
@@ -48,12 +49,13 @@ type Pod struct {
 }
 
 type kubectlPortal struct {
-	proxyPodName string
+	proxyPodName  string
+	image         string
+	pullPolicy    string
+	port          uint
+	clusterDomain string
 
-	namespace  string
-	image      string
-	pullPolicy string
-	port       uint
+	namespace string
 }
 
 type kubectlCmd struct {
@@ -250,6 +252,7 @@ func parseFlags(kp *kubectlPortal) error {
 	flags.StringVar(&kp.image, "portal-image", defaultImage, "Image to use for HTTP proxy")
 	flags.StringVar(&kp.proxyPodName, "portal-name", defaultPodName, "Pod name to use for HTTP proxy")
 	flags.StringVar(&kp.pullPolicy, "portal-pull-policy", proxyPodImagePullPolicy, "Image pull policy to use for HTTP proxy")
+	flags.StringVar(&kp.clusterDomain, "portal-cluster-domain", defaultClusterDomain, "Cluster domain to use in HTTP proxy DNS resolution")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
