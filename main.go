@@ -23,6 +23,7 @@ const (
 	proxyPodImagePullPolicy      = "IfNotPresent"
 	proxyResourceNameBase        = "kubectl-portal-proxy"
 	proxyVolumeName              = "proxy-volume"
+	proxyClusterDomainEnv        = "KUBECTL_PORTAL_CLUSTER_DOMAIN"
 	defaultPort             uint = 7070
 	defaultClusterDomain         = "cluster.local"
 )
@@ -50,6 +51,7 @@ type Container struct {
 	ImagePullPolicy string      `json:"imagePullPolicy"`
 	Ports           []Port      `json:"ports"`
 	VolumeMounts    []stringMap `json:"volumeMounts"`
+	Env             []stringMap `json:"env"`
 }
 
 type Volume struct {
@@ -163,6 +165,14 @@ func (kp *kubectlPortal) proxyPod() Pod {
 					"name":      proxyVolumeName,
 					"subPath":   "access.lua",
 				},
+				{
+					"mountPath": "/usr/local/openresty/nginx/conf/nginx.conf",
+					"name":      proxyVolumeName,
+					"subPath":   "nginx.conf",
+				},
+			},
+			Env: []stringMap{
+				{"name": proxyClusterDomainEnv, "value": kp.clusterDomain},
 			},
 		},
 	}
@@ -183,6 +193,7 @@ func (kp *kubectlPortal) proxyConfigMap() ConfigMap {
 	config.Resource.Metadata.Name = kp.proxyResourceName
 	config.Data["access.lua"] = readEmbeddedFile("data/access.lua")
 	config.Data["default.conf"] = readEmbeddedFile("data/default.conf")
+	config.Data["nginx.conf"] = readEmbeddedFile("data/nginx.conf")
 	return config
 }
 
