@@ -132,6 +132,8 @@ func (kc *kubectlCmd) run(input []byte) ([]byte, error) {
 
 func (kc *kubectlCmd) start() (*exec.Cmd, error) {
 	cmd := exec.Command("kubectl", kc.args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd, cmd.Start()
 }
 
@@ -209,7 +211,7 @@ func (kp *kubectlPortal) proxyConfigMap() ConfigMap {
 }
 
 func (kp *kubectlPortal) deleteProxyResources() error {
-	kp.vprintf("deleting proxy resources...\n")
+	kp.vprintf("Deleting proxy resources...\n")
 
 	kc := newKubectl(
 		"delete",
@@ -222,11 +224,13 @@ func (kp *kubectlPortal) deleteProxyResources() error {
 	if err != nil {
 		return fmt.Errorf("'kubectl delete' failed: %w\n%v", err, string(out))
 	}
+
+	kp.vprintf("Resources deleted\n")
 	return nil
 }
 
 func (kp *kubectlPortal) createProxyResources() error {
-	kp.printf("creating proxy resources...\n")
+	kp.printf("Creating proxy resources...\n")
 
 	buf := bytes.Buffer{}
 	enc := json.NewEncoder(&buf)
@@ -248,11 +252,13 @@ func (kp *kubectlPortal) createProxyResources() error {
 	if err != nil {
 		return fmt.Errorf("'kubectl apply' failed: %w\n%v", err, string(out))
 	}
+
+	kp.printf("Resources created\n")
 	return nil
 }
 
 func (kp *kubectlPortal) waitForProxyPod() error {
-	kp.printf("waiting for proxy to be ready...\n")
+	kp.printf("Waiting for proxy to be ready...\n")
 
 	kc := newKubectl(
 		"wait",
@@ -264,7 +270,9 @@ func (kp *kubectlPortal) waitForProxyPod() error {
 	if err != nil {
 		return fmt.Errorf("'kubectl wait' failed: %w\n%s", err, string(out))
 	}
-	return err
+
+	kp.printf("Proxy is ready\n")
+	return nil
 }
 
 func (kp *kubectlPortal) portForwardProxyPod() error {
@@ -279,25 +287,31 @@ func (kp *kubectlPortal) portForwardProxyPod() error {
 		return fmt.Errorf("'kubectl port-forward' failed: %w\n", err)
 	}
 
-	kp.printf("kubectl port-forward now running at localhost:%v\n", kp.port)
+	interrupt := make(chan os.Signal, 1)
+	done := make(chan error, 1)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
+	go func() {
+		done <- cmd.Wait()
+	}()
 
-	fmt.Println("\ninterrupt received")
+	signal.Notify(interrupt, os.Interrupt)
 
-	err = cmd.Process.Signal(os.Interrupt)
-	if err != nil {
-		return fmt.Errorf("interrupt 'kubectl port-forward' failed: %w\n", err)
+	for {
+		select {
+		case <-interrupt:
+			kp.printf("Interrupt signal received\n")
+
+			err = cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				return fmt.Errorf("interrupt 'kubectl port-forward' failed: %w\n", err)
+			}
+		case err = <-done:
+			if err != nil {
+				return fmt.Errorf("wait 'kubectl port-forward' failed: %w\n", err)
+			}
+			return nil
+		}
 	}
-
-	err = cmd.Wait()
-	if err != nil {
-		return fmt.Errorf("wait 'kubectl port-forward' failed: %w\n", err)
-	}
-
-	return nil
 }
 
 func (kp *kubectlPortal) run() error {
@@ -311,6 +325,8 @@ func (kp *kubectlPortal) run() error {
 		return err
 	}
 	defer func() {
+		kp.printf("Cleaning up...\n")
+
 		err2 := kp.deleteProxyResources()
 		// TODO: Group errors
 		if err == nil {
