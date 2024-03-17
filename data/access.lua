@@ -10,7 +10,8 @@ local namespace = os.getenv("KUBECTL_PORTAL_NAMESPACE")
 -- 2. my-service.my-namespace
 -- 3. my-service.my-namespace.svc
 -- 4. Other, with 3 periods or more (possibly a FQDN)
-
+-- Based on this, try to convert it to a FQDN.
+--
 -- Note that:
 -- + Namespace names follow the RFC 1123 format (no periods)
 -- + Service names follow the RFC 1035 format (no periods)
