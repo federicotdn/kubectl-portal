@@ -18,15 +18,18 @@ import (
 )
 
 const (
-	nameHashLength                = 10
-	proxyPodImage                 = "openresty/openresty:1.21.4.1-0-jammy"
-	proxyPodImagePullPolicy       = "IfNotPresent"
-	proxyResourceNameBase         = "kubectl-portal-proxy"
-	proxyVolumeName               = "proxy-volume"
-	proxyClusterDomainEnv         = "KUBECTL_PORTAL_CLUSTER_DOMAIN"
-	proxyClusterNamespaceEnv      = "KUBECTL_PORTAL_NAMESPACE"
-	defaultPort              uint = 7070
-	defaultClusterDomain          = "cluster.local"
+	nameHashLength                  = 10
+	proxyPodImageHttp               = "openresty/openresty:1.21.4.1-0-jammy"
+	proxyPodImageWs                 = "python:3.12.2-alpine"
+	proxyPodImagePullPolicy         = "IfNotPresent"
+	proxyResourceNameBase           = "kubectl-portal-proxy"
+	proxyVolumeName                 = "proxy-volume"
+	proxyClusterDomainEnv           = "KUBECTL_PORTAL_CLUSTER_DOMAIN"
+	proxyClusterNamespaceEnv        = "KUBECTL_PORTAL_NAMESPACE"
+	proxyClusterHcproxyPortEnv      = "KUBECTL_PORTAL_HCPROXY_PORT"
+	defaultPort                uint = 7070
+	defaultPortWs              uint = 7071
+	defaultClusterDomain            = "cluster.local"
 )
 
 //go:embed data
@@ -60,6 +63,7 @@ type Container struct {
 	Ports           []Port      `json:"ports"`
 	VolumeMounts    []stringMap `json:"volumeMounts"`
 	Env             []EnvVal    `json:"env"`
+	Command         []string    `json:"command,omitempty"`
 }
 
 type Volume struct {
@@ -83,8 +87,10 @@ type ConfigMap struct {
 type kubectlPortal struct {
 	proxyResourceName string
 	image             string
+	imageWs           string
 	pullPolicy        string
 	port              uint
+	portWs            uint
 	clusterDomain     string
 
 	namespace string
@@ -132,7 +138,6 @@ func (kc *kubectlCmd) run(input []byte) ([]byte, error) {
 
 func (kc *kubectlCmd) start() (*exec.Cmd, error) {
 	cmd := exec.Command("kubectl", kc.args...)
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd, cmd.Start()
 }
@@ -154,13 +159,19 @@ func proxyResourceName() string {
 }
 
 func (kp *kubectlPortal) proxyPod() Pod {
+	env := []EnvVal{
+		{Name: proxyClusterDomainEnv, Value: kp.clusterDomain},
+		{Name: proxyClusterNamespaceEnv, ValueFrom: anyMap{
+			"fieldRef": stringMap{"fieldPath": "metadata.namespace"},
+		}},
+	}
 	pod := Pod{
 		Resource: Resource{ApiVersion: "v1", Kind: "Pod"},
 	}
 	pod.Resource.Metadata.Name = kp.proxyResourceName
 	pod.Spec.Containers = []Container{
 		{
-			Name:            "proxy",
+			Name:            "proxy-http",
 			Image:           kp.image,
 			ImagePullPolicy: kp.pullPolicy,
 			Ports:           []Port{{ContainerPort: 80}},
@@ -181,12 +192,22 @@ func (kp *kubectlPortal) proxyPod() Pod {
 					"subPath":   "nginx.conf",
 				},
 			},
-			Env: []EnvVal{
-				{Name: proxyClusterDomainEnv, Value: kp.clusterDomain},
-				{Name: proxyClusterNamespaceEnv, ValueFrom: anyMap{
-					"fieldRef": stringMap{"fieldPath": "metadata.namespace"},
-				}},
+			Env: env,
+		},
+		{
+			Name:            "proxy-ws",
+			Image:           kp.imageWs,
+			ImagePullPolicy: kp.pullPolicy,
+			Command:         []string{"python3", "/app/hcproxy.py"},
+			Ports:           []Port{{ContainerPort: 81}},
+			VolumeMounts: []stringMap{
+				{
+					"mountPath": "/app/hcproxy.py",
+					"name":      proxyVolumeName,
+					"subPath":   "hcproxy.py",
+				},
 			},
+			Env: env,
 		},
 	}
 	pod.Spec.Volumes = []Volume{
@@ -207,6 +228,7 @@ func (kp *kubectlPortal) proxyConfigMap() ConfigMap {
 	config.Data["access.lua"] = readEmbeddedFile("data/access.lua")
 	config.Data["default.conf"] = readEmbeddedFile("data/default.conf")
 	config.Data["nginx.conf"] = readEmbeddedFile("data/nginx.conf")
+	config.Data["hcproxy.py"] = readEmbeddedFile("data/hcproxy.py")
 	return config
 }
 
@@ -276,10 +298,14 @@ func (kp *kubectlPortal) waitForProxyPod() error {
 }
 
 func (kp *kubectlPortal) portForwardProxyPod() error {
+	kp.printf("Listening at localhost:%v (HTTP)\n", kp.port)
+	kp.printf("Listening at localhost:%v (WebSocket)\n", kp.portWs)
+
 	kc := newKubectl(
 		"port-forward",
 		proxyResourceName(),
 		fmt.Sprintf("%v:80", kp.port),
+		fmt.Sprintf("%v:81", kp.portWs),
 	).namespace(kp.namespace)
 
 	cmd, err := kc.start()
@@ -372,10 +398,12 @@ func parseFlags(kp *kubectlPortal) error {
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")
 	flags.BoolVar(&kp.verbose, "portal-verbose", false, "Enable verbose mode for kubectl-portal")
 	flags.UintVar(&kp.port, "portal-port", defaultPort, "Local port to use for HTTP proxy")
-	flags.StringVar(&kp.image, "portal-image", proxyPodImage, "Image to use for HTTP proxy")
-	flags.StringVar(&kp.proxyResourceName, "portal-name", defaultResourceName, "Pod/ConfigMap name to use for HTTP proxy")
-	flags.StringVar(&kp.pullPolicy, "portal-pull-policy", proxyPodImagePullPolicy, "Image pull policy to use for HTTP proxy")
-	flags.StringVar(&kp.clusterDomain, "portal-cluster-domain", defaultClusterDomain, "Cluster domain to use in HTTP proxy DNS resolution")
+	flags.UintVar(&kp.portWs, "portal-port-ws", defaultPortWs, "Local port to use for WebSocket proxy")
+	flags.StringVar(&kp.image, "portal-image", proxyPodImageHttp, "Image to use for HTTP proxy")
+	flags.StringVar(&kp.imageWs, "portal-image-ws", proxyPodImageWs, "Image to use for WebSocket proxy")
+	flags.StringVar(&kp.proxyResourceName, "portal-name", defaultResourceName, "Pod/ConfigMap name to use for proxy")
+	flags.StringVar(&kp.pullPolicy, "portal-pull-policy", proxyPodImagePullPolicy, "Image pull policy to use for proxy")
+	flags.StringVar(&kp.clusterDomain, "portal-cluster-domain", defaultClusterDomain, "Cluster domain to use in proxy DNS resolution")
 
 	err := flags.Parse(os.Args)
 	if err != nil {
