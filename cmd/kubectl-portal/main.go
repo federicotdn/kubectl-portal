@@ -74,11 +74,8 @@ type ConfigMap struct {
 type kubectlPortal struct {
 	proxyResourceName string
 	image             string
-	imageWs           string
 	pullPolicy        string
 	port              uint
-	portWs            uint
-	clusterDomain     string
 
 	namespace string
 	verbose   bool

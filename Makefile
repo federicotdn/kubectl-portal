@@ -1,5 +1,5 @@
 SHELL = bash
-GOLANGCI_LINT_CACHE = $(shell pwd)/.cache
+GOLANGCI_LINT_CACHE = ~/.cache/golangci-lint/latest
 TOOL_DIR = ./cmd/kubectl-portal
 PROXY_DIR = ./cmd/kubectl-portal-proxy
 
@@ -15,16 +15,14 @@ build-proxy:
 clean:
 	rm -f kubectl-portal \
 		  kubectl-portal-proxy \
-		  $(TOOL_DIR)/data/go.mod.copy \
-		  $(TOOL_DIR)/data/go.sum.copy \
-		  $(TOOL_DIR)/data/main.go
+		  $(TOOL_DIR)/data/*
 	sudo rm -rf $(GOLANGCI_LINT_CACHE)
 
 fmt:
-	gofmt -s -w -l .
+	gofmt -s -w -l cmd
 
 checkfmt:
-	test -z "$$(gofmt -l .)"
+	test -z "$$(gofmt -l cmd)"
 
 lint:
 	docker run -t --rm -v $$(pwd):/app -v $(GOLANGCI_LINT_CACHE):/root/.cache -w /app golangci/golangci-lint:latest golangci-lint run -v

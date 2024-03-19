@@ -22,5 +22,5 @@ func main() {
 	proxy.Verbose = true
 
 	log.Printf("Started kubectl-portal-proxy")
-	log.Fatal(http.ListenAndServe(":" + port, proxy))
+	log.Fatal(http.ListenAndServe(":"+port, proxy))
 }
