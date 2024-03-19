@@ -1,9 +1,9 @@
 SHELL = bash
-GOLANGCI_LINT_CACHE = ~/.cache/golangci-lint/latest
+GOLANGCI_LINT_CACHE = $(shell pwd)/.cache
 TOOL_DIR = ./cmd/kubectl-portal
 PROXY_DIR = ./cmd/kubectl-portal-proxy
 
-build-tool:
+build:
 	cp go.mod $(TOOL_DIR)/data/go.mod.copy
 	cp go.sum $(TOOL_DIR)/data/go.sum.copy
 	cp $(PROXY_DIR)/main.go $(TOOL_DIR)/data
@@ -13,7 +13,11 @@ build-proxy:
 	go build $(PROXY_DIR)
 
 clean:
-	rm -rf kubectl-portal kubectl-portal-proxy
+	rm -f kubectl-portal \
+		  kubectl-portal-proxy \
+		  $(TOOL_DIR)/data/go.mod.copy \
+		  $(TOOL_DIR)/data/go.sum.copy \
+		  $(TOOL_DIR)/data/main.go
 	sudo rm -rf $(GOLANGCI_LINT_CACHE)
 
 fmt:

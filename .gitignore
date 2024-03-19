@@ -25,3 +25,4 @@ kubectl-portal
 kubectl-portal-proxy
 !cmd/kubectl-portal
 !cmd/kubectl-portal-proxy
+.cache/
