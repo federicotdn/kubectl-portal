@@ -86,9 +86,11 @@ Figuring out the correct URL to use mostly depends on the [DNS name](https://kub
 - If the Service is in namespace `my-namespace`: `http://my-service.my-namespace`.
 
 **For a Pod with IP `10.244.2.1`**:
-- If the Pod is in namespace `my-namespace`: `http://10-244-2-1.my-namespace` (Note: namespace must always be specified)
+- If the Pod is in namespace `my-namespace`: `http://10-244-2-1.my-namespace.pod` (Note: namespace must always be specified).
 
 The Pod's IP can be retrieved using `kubectl describe pod <name>`.
+
+Change `http://` to `https://`, `ws://` or `wss://` when needed.
 
 ## Comparison with kubectl proxy
 
