@@ -105,6 +105,9 @@ There is overlap between the functionality of kubectl proxy and kubectl portal. 
 | When connecting to Services, must provide the Service's name | When connecting to Services, must provide the Service's name. |
 | When connecting to Pods, must provide the Pod's name. | When connecting to Pods, must provide the Pod's DNS name (e.g. `10-244-2-1.default.pod`). |
 
+## Related Projects
+- [kubectl-plugin-socks5-proxy](https://github.com/yokawasa/kubectl-plugin-socks5-proxy) - structured like kubectl-portal, but runs a SOCKS5 proxy instead of an HTTP one.
+
 ## Additional Links
 
 Additional useful information can be found here:
