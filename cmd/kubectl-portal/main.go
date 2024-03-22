@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
+	"strings"
 
 	"github.com/spf13/pflag"
 )
@@ -218,7 +219,7 @@ func (kp *kubectlPortal) deleteProxyResources() error {
 	return nil
 }
 
-func (kp *kubectlPortal) createProxyResources() error {
+func (kp *kubectlPortal) createProxyResources() (string, error) {
 	kp.printf("Creating proxy resources...\n")
 
 	buf := bytes.Buffer{}
@@ -236,14 +237,21 @@ func (kp *kubectlPortal) createProxyResources() error {
 		panicf("error: unable to marshal ConfigMap data: %s", err)
 	}
 
-	kc := newKubectl("apply", "-f", "-").namespace(kp.namespace)
+	kc := newKubectl(
+		"apply",
+		"-f",
+		"-",
+		"-o",
+		"jsonpath={.items[0].metadata.namespace}",
+	).namespace(kp.namespace)
+
 	out, err := kc.run(buf.Bytes())
 	if err != nil {
-		return fmt.Errorf("'kubectl apply' failed: %w\n%v", err, string(out))
+		return "", fmt.Errorf("'kubectl apply' failed: %w\n%v", err, string(out))
 	}
 
 	kp.printf("Resources created\n")
-	return nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (kp *kubectlPortal) waitForProxyPod() error {
@@ -260,7 +268,6 @@ func (kp *kubectlPortal) waitForProxyPod() error {
 		return fmt.Errorf("'kubectl wait' failed: %w\n%s", err, string(out))
 	}
 
-	kp.printf("Proxy is ready\n")
 	return nil
 }
 
@@ -311,7 +318,7 @@ func (kp *kubectlPortal) run() error {
 		return err
 	}
 
-	err = kp.createProxyResources()
+	effectiveNs, err := kp.createProxyResources()
 	if err != nil {
 		return err
 	}
@@ -326,6 +333,9 @@ func (kp *kubectlPortal) run() error {
 	if err != nil {
 		return err
 	}
+
+	kp.printf("Proxy is ready (namespace: %v)\n", effectiveNs)
+
 	err = kp.portForwardProxyPod()
 	return err
 }
@@ -359,7 +369,7 @@ func parseFlags(kp *kubectlPortal) error {
 	// kubectl flags
 	// Taken from:
 	// https://github.com/kubernetes/cli-runtime/blob/master/pkg/genericclioptions/config_flags.go
-	flags.StringVarP(&kp.namespace, "--namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flags.StringVarP(&kp.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	// Custom flags
 	flags.BoolVarP(&help, "help", "h", false, "Show usage help")

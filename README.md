@@ -10,11 +10,13 @@ Proxy is ready
 Listening at localhost:7070
 ```
 
-which can then be used with any HTTP/WebSocket client with HTTP proxy support, such as cURL:
+which can then be used with any HTTP/WebSocket client with HTTP proxy support, such as cURL with `-x`:
 ```bash
 $ curl -x localhost:7070 http://my-service/my-endpoint
 {"foo": "bar"}
 ```
+
+_See how kubectl portal compares to kubectl proxy in the section [below](#comparison-with-kubectl-proxy)._
 
 ## Installation
 
@@ -88,7 +90,7 @@ Figuring out the correct URL to use mostly depends on the [DNS name](https://kub
 **For a Pod with IP `10.244.2.1`**:
 - If the Pod is in namespace `my-namespace`: `http://10-244-2-1.my-namespace.pod` (Note: namespace must always be specified).
 
-The Pod's IP can be retrieved using `kubectl describe pod <name>`.
+The Pod's IP can be retrieved using `kubectl get pod <name> --template '{{.status.podIP}}'`
 
 Change `http://` to `https://`, `ws://` or `wss://` when needed.
 
@@ -96,7 +98,7 @@ Change `http://` to `https://`, `ws://` or `wss://` when needed.
 
 There is overlap between the functionality of kubectl proxy and kubectl portal. This table aims to clear it up to some degree:
 
-| [kubectl proxy](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_proxy/) | kubectl portal *(this project)* |
+| [kubectl proxy](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_proxy/) | kubectl portal |
 | --- | --- |
 | Provided by kubectl itself. | Installed using Krew or by building from source. |
 | Allows local access to the Kubernetes API, and thus to endpoints exposed by Services and Pods as well. | Allows local access to endpoints exposed by Services and Pods, plus any host reachable from within the cluster (e.g. a private database, dashboard, etc). |
