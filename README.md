@@ -117,8 +117,8 @@ There is some overlap between how kubectl proxy and kubectl portal can be used. 
       <td width="50%">Requires the user to configure the HTTP client to use the local proxy, and then use a URL such as:<br> <code>http://my-service/my-endpoint</code> (using the selected namespace).</td>
     </tr>
     <tr>
-      <td width="50%">Must always provide the namespace as part of the URL (e.g. <code>default</code>).</td>
-      <td width="50%">When connecting to a Service, specifying the namespace is optional, if omitted the value of <code>--namespace</code> will be used, or the current context's namespace (i.e. the selected namespace).</td>
+      <td width="50%">Must always provide the namespace as part of the URL.</td>
+      <td width="50%">When connecting to a Service, specifying the namespace is optional.</td>
     </tr>
     <tr>
       <td width="50%">When connecting to Services, must provide the Service's name.</td>
@@ -126,7 +126,7 @@ There is some overlap between how kubectl proxy and kubectl portal can be used. 
     </tr>
     <tr>
       <td width="50%">When connecting to Pods, must provide the Pod's name.</td>
-      <td width="50%">When connecting to Pods, must provide the Pod's IP (e.g. <code>10.244.2.1</code>).</td>
+      <td width="50%">When connecting to Pods, must provide the Pod's IP.</td>
     </tr>
   </tbody>
 </table>
