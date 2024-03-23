@@ -87,25 +87,49 @@ Figuring out the correct URL to use mostly depends on the [DNS name](https://kub
 - If the Service is in the selected namespace: `http://my-service`.
 - If the Service is in namespace `my-namespace`: `http://my-service.my-namespace`.
 
-**For a Pod with IP `10.244.2.1`**:
-- If the Pod is in namespace `my-namespace`: `http://10-244-2-1.my-namespace.pod` (Note: namespace must always be specified).
-
-The Pod's IP can be retrieved using `kubectl get pod <name> --template '{{.status.podIP}}'`
+**For a Pod with name `my-pod`**:
+- First, find the Pod's IP using: `kubectl get pod my-pod --template {{.status.podIP}}`. The URL then is `http://<IP>`.
 
 Change `http://` to `https://`, `ws://` or `wss://` when needed.
 
 ## Comparison with kubectl proxy
 
-There is overlap between the functionality of kubectl proxy and kubectl portal. This table aims to clear it up to some degree:
+There is some overlap between how kubectl proxy and kubectl portal can be used. This table aims to clear it up to some degree:
 
-| [kubectl proxy](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_proxy/) | kubectl portal |
-| --- | --- |
-| Provided by kubectl itself. | Installed using Krew or by building from source. |
-| Allows local access to the Kubernetes API, and thus to endpoints exposed by Services and Pods as well. | Allows local access to endpoints exposed by Services and Pods, plus any host reachable from within the cluster (e.g. a private database, dashboard, etc). |
-| Requires a URL in the form described [here](https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/#manually-constructing-apiserver-proxy-urls), such as:<br> `http://localhost:8001/api/v1/namespaces/default/services/my-service:80/proxy/my-endpoint`. | Requires the user to configure the HTTP client to use the local proxy, and then use a URL such as:<br> `http://my-service/my-endpoint` (using the selected namespace). |
-| Must always provide the namespace as part of the URL (e.g. `default`). | When connecting to a Service, specifying the namespace is optional, if omitted the value of `--namespace` will be used, or the current context's namespace (i.e. the selected namespace). |
-| When connecting to Services, must provide the Service's name | When connecting to Services, must provide the Service's name. |
-| When connecting to Pods, must provide the Pod's name. | When connecting to Pods, must provide the Pod's DNS name (e.g. `10-244-2-1.default.pod`). |
+<table width="100%">
+  <thead>
+    <tr>
+      <th width="50%">[kubectl proxy](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_proxy/)</th>
+      <th width="50%">kubectl portal _(this project)_</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td width="50%">Provided by kubectl itself.</td>
+      <td width="50%">Installed using Krew or by building from source.</td>
+    </tr>
+    <tr>
+      <td width="50%">Allows local access to the Kubernetes API, and thus to endpoints exposed by Services and Pods as well.</td>
+      <td width="50%">Allows local access to endpoints exposed by Services and Pods, plus any host reachable from within the cluster (e.g. a private database, dashboard, etc).</td>
+    </tr>
+    <tr>
+      <td width="50%">Requires a URL in the form described [here](https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/#manually-constructing-apiserver-proxy-urls), such as:<br> `http://localhost:8001/api/v1/namespaces/default/services/my-service:80/proxy/my-endpoint`.</td>
+      <td width="50%">Requires the user to configure the HTTP client to use the local proxy, and then use a URL such as:<br> `http://my-service/my-endpoint` (using the selected namespace).</td>
+    </tr>
+    <tr>
+      <td width="50%">Must always provide the namespace as part of the URL (e.g. `default`).</td>
+      <td width="50%">When connecting to a Service, specifying the namespace is optional, if omitted the value of `--namespace` will be used, or the current context's namespace (i.e. the selected namespace).</td>
+    </tr>
+    <tr>
+      <td width="50%">When connecting to Services, must provide the Service's name.</td>
+      <td width="50%">When connecting to Services, must provide the Service's name.</td>
+    </tr>
+    <tr>
+      <td width="50%">When connecting to Pods, must provide the Pod's name.</td>
+      <td width="50%">When connecting to Pods, must provide the Pod's IP (e.g. `10.244.2.1`).</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Related Projects
 - [kubectl-plugin-socks5-proxy](https://github.com/yokawasa/kubectl-plugin-socks5-proxy) - structured like kubectl-portal, but runs a SOCKS5 proxy instead of an HTTP one.
