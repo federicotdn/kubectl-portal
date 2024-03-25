@@ -1,7 +1,7 @@
 # kubectl-portal
 ![GitHub Tag](https://img.shields.io/github/v/tag/federicotdn/kubectl-portal)
 ![GitHub License](https://img.shields.io/github/license/federicotdn/kubectl-portal)
-[![Static Badge](https://img.shields.io/badge/krew-install-blue)](https://krew.sigs.k8s.io/)
+[![Static Badge](https://img.shields.io/badge/krew-install-aquamarine)](https://krew.sigs.k8s.io/)
 
 A kubectl plugin that launches an HTTP proxy, enabling you to make requests to Services, Pods and any other host reachable from within your cluster.
 
