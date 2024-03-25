@@ -44,14 +44,22 @@ type Port struct {
 	ContainerPort uint `json:"containerPort"`
 }
 
+type ReadinessProbe struct {
+	TcpSocket struct {
+		Port uint `json:"port"`
+	} `json:"tcpSocket"`
+	PeriodSeconds int `json:"periodSeconds"`
+}
+
 type Container struct {
-	Name            string      `json:"name"`
-	Image           string      `json:"image"`
-	ImagePullPolicy string      `json:"imagePullPolicy"`
-	Ports           []Port      `json:"ports"`
-	VolumeMounts    []stringMap `json:"volumeMounts"`
-	Command         []string    `json:"command,omitempty"`
-	Args            []string    `json:"args,omitempty"`
+	Name            string         `json:"name"`
+	Image           string         `json:"image"`
+	ImagePullPolicy string         `json:"imagePullPolicy"`
+	Ports           []Port         `json:"ports"`
+	VolumeMounts    []stringMap    `json:"volumeMounts"`
+	Command         []string       `json:"command,omitempty"`
+	Args            []string       `json:"args,omitempty"`
+	ReadinessProbe  ReadinessProbe `json:"readinessProbe"`
 }
 
 type Volume struct {
@@ -179,6 +187,8 @@ func (kp *kubectlPortal) proxyPod() Pod {
 			Args:    []string{"-c", "cd /app && go run main.go"},
 		},
 	}
+	pod.Spec.Containers[0].ReadinessProbe.TcpSocket.Port = internalPort
+	pod.Spec.Containers[0].ReadinessProbe.PeriodSeconds = 1
 	pod.Spec.Volumes = []Volume{
 		{
 			Name:      proxyVolumeName,
