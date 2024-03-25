@@ -20,16 +20,19 @@ _See how kubectl portal compares to kubectl proxy in the section [below](#compar
 
 ## Installation
 
-You can install kubectl-portal via different methods:
+You can install kubectl-portal via one of these methods:
 
-### Krew
+### Krew _(recommended)_
 
 Assuming you have [Krew](https://krew.sigs.k8s.io/) installed, run:
 ```bash
 kubectl krew install portal
 ```
 
-### Build
+### Install from Binary
+You can go to the [releases](https://github.com/federicotdn/kubectl-portal/releases) page, and download the binary that corresponds to your system.
+
+### Build from Source
 
 You'll need to run the following commands:
 ```bash
@@ -37,7 +40,7 @@ git clone https://github.com/federicotdn/kubectl-portal.git
 cd kubectl-portal
 make build
 ```
-After that, copy the `kubectl-portal` binary somewhere in your `$PATH`.
+After that, copy the `kubectl-portal` binary somewhere in your `$PATH` - or run `./kubectl-portal` directly.
 
 ## Usage
 
