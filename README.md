@@ -24,7 +24,10 @@ You can install kubectl-portal via different methods:
 
 ### Krew
 
-TODO
+Assuming you have [Krew](https://krew.sigs.k8s.io/) installed, run:
+```bash
+kubectl krew install portal
+```
 
 ### Build
 
