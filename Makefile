@@ -3,10 +3,12 @@ GOLANGCI_LINT_CACHE = ~/.cache/golangci-lint/latest
 TOOL_DIR = ./cmd/kubectl-portal
 PROXY_DIR = ./cmd/kubectl-portal-proxy
 
-build:
+pre-build:
 	cp go.mod $(TOOL_DIR)/data/go.mod.copy
 	cp go.sum $(TOOL_DIR)/data/go.sum.copy
 	cp $(PROXY_DIR)/main.go $(TOOL_DIR)/data
+
+build: pre-build
 	go build $(TOOL_DIR)
 
 build-proxy:

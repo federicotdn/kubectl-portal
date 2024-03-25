@@ -3,7 +3,7 @@ kind: Plugin
 metadata:
   name: portal
 spec:
-  version: v${VERSION}
+  version: {{ .TagName }}
   homepage: https://github.com/federicotdn/kubectl-portal
   shortDescription: An HTTP proxy for connecting to stuff inside your cluster.
   description: |
@@ -16,33 +16,28 @@ spec:
         os: darwin
         arch: amd64
     bin: kubectl-portal
-    uri: https://github.com/federicotdn/kubectl-portal/releases/download/v${VERSION}/kubectl-portal-darwin-amd64.tar.gz
-    sha256: ${SHA256_DARWIN_AMD64}
+    {{addURIAndSha "https://github.com/federicotdn/kubectl-portal/releases/download/{{ .TagName }}/kubectl-portal_{{ .TagName }}_darwin_amd64.tar.gz" .TagName }}
   - selector:
       matchLabels:
         os: darwin
         arch: arm64
     bin: kubectl-portal
-    uri: https://github.com/federicotdn/kubectl-portal/releases/download/v${VERSION}/kubectl-portal-darwin-arm64.tar.gz
-    sha256: ${SHA256_DARWIN_ARM64}
+        {{addURIAndSha "https://github.com/federicotdn/kubectl-portal/releases/download/{{ .TagName }}/kubectl-portal_{{ .TagName }}_darwin_arm64.tar.gz" .TagName }}
   - selector:
       matchLabels:
         os: linux
         arch: amd64
     bin: kubectl-portal
-    uri: https://github.com/federicotdn/kubectl-portal/releases/download/v${VERSION}/kubectl-portal-linux-amd64.tar.gz
-    sha256: ${SHA256_LINUX_AMD64}
+    {{addURIAndSha "https://github.com/federicotdn/kubectl-portal/releases/download/{{ .TagName }}/kubectl-portal_{{ .TagName }}_linux_amd64.tar.gz" .TagName }}
   - selector:
       matchLabels:
         os: linux
         arch: arm64
     bin: kubectl-portal
-    uri: https://github.com/federicotdn/kubectl-portal/releases/download/v${VERSION}/kubectl-portal-linux-arm64.tar.gz
-    sha256: ${SHA256_LINUX_ARM64}
+    {{addURIAndSha "https://github.com/federicotdn/kubectl-portal/releases/download/{{ .TagName }}/kubectl-portal_{{ .TagName }}_linux_arm64.tar.gz" .TagName }}
   - selector:
       matchLabels:
         os: windows
         arch: amd64
     bin: kubectl-portal.exe
-    uri: https://github.com/federicotdn/kubectl-portal/releases/download/v${VERSION}/kubectl-portal-windows-amd64.tar.gz
-    sha256: ${SHA256_WINDOWS_AMD64}
+    {{addURIAndSha "https://github.com/federicotdn/kubectl-portal/releases/download/{{ .TagName }}/kubectl-portal_{{ .TagName }}_windows_amd64.tar.gz" .TagName }}
