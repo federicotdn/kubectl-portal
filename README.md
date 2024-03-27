@@ -3,8 +3,7 @@
 ![GitHub License](https://img.shields.io/github/license/federicotdn/kubectl-portal)
 [![Static Badge](https://img.shields.io/badge/krew-install-aquamarine)](https://krew.sigs.k8s.io/)
 
-A kubectl plugin that launches an HTTP proxy, enabling you to make requests to Services, Pods and any other host reachable from within your cluster.
-
+A kubectl plugin that launches an HTTP proxy, enabling you to make HTTP requests (or open WebSocket/TCP connections) to Services, Pods and any other host reachable from within your cluster.
 ```bash
 $ kubectl portal
 Creating proxy resources...
@@ -14,7 +13,7 @@ Proxy is ready
 Listening at localhost:7070
 ```
 
-which can then be used with any HTTP/WebSocket client with HTTP proxy support, such as cURL with `-x`:
+which can then be used with any e.g. HTTP client with HTTP proxy support, such as cURL with `-x`:
 ```bash
 $ curl -x localhost:7070 http://my-service/my-endpoint
 {"foo": "bar"}
@@ -55,7 +54,7 @@ You can run `kubectl portal --help` to get an overview of the command line flags
 3. The command will wait until the user presses Ctrl-C to interrupt the operation.
 4. The proxy Pod will be deleted and the command will exit.
 
-While kubectl-portal is running, you'll need to configure your HTTP or WebSocket client to use the HTTP proxy at `http://localhost:7070`. The way this is done varies between clients, but here are some examples:
+While kubectl-portal is running, you'll need to configure your HTTP, WebSocket or TCP client to use the HTTP proxy at `http://localhost:7070`. The way this is done varies between clients, but here are some examples:
 
 ### HTTP
 #### [cURL](https://curl.se/)
@@ -78,16 +77,23 @@ get http://my-service/my-endpoint
 ### WebSocket
 #### [websocat](https://github.com/vi/websocat) + [socat](http://www.dest-unreach.org/socat/)
 
-```
+```bash
 websocat -t --ws-c-uri=ws://my-service/my-ws-endpoint - ws-c:cmd:'socat - proxy:localhost:my-service:80,proxyport=7070'
 ```
 
 Or, if the target server is using TLS (port 443):
-```
+```bash
 websocat -t --ws-c-uri=wss://my-service/my-ws-endpoint - ws-c:ssl-connect:cmd:'socat - proxy:localhost:my-service:443,proxyport=7070'
 ```
 
 (in some cases, adding `--tls-domain=my-service` will be necessary).
+
+### Raw TCP
+#### [netcat](https://netcat.sourceforge.net/)
+
+```bash
+netcat -X connect -x localhost:7070 my-service 80
+```
 
 ## URLs of Services and Pods
 
@@ -115,28 +121,24 @@ There is some overlap between how kubectl portal/proxy/port-forward can be used 
   </thead>
   <tbody>
     <tr>
-      <td width="50%">Allows local access to the Kubernetes API, and thus to endpoints exposed by Services and Pods as well.</td>
-      <td width="50%">Allows local access to endpoints exposed by Services and Pods, plus any host reachable from within the cluster (e.g. a private database, dashboard, etc).</td>
+      <td width="50%">Connect to Services and Pods.</td>
+      <td width="50%">Connect to Services, Pods, or hosts reachable from within the cluster (e.g. database, dashboard, etc).</td>
     </tr>
     <tr>
-      <td width="50%">Requires a URL in the form described <a href="https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/#manually-constructing-apiserver-proxy-urls)">here</a>, such as:<br> <code>http://localhost:8001/api/v1/namespaces/default/services/my-service:80/proxy/my-endpoint</code>.</td>
-      <td width="50%">Requires the user to configure the HTTP client to use the local proxy, and then use a URL such as:<br> <code>http://my-service/my-endpoint</code> (using the currently selected namespace).</td>
+      <td width="50%">URL <a href="https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/#manually-constructing-apiserver-proxy-urls)">example</a>:<br><code>http://localhost:8001/api/v1/namespaces/default/services/my-service:80/proxy/my-endpoint</code>.</td>
+      <td width="50%">URL example:<br><code>http://my-service/my-endpoint</code> (with <code>localhost:7070</code> as proxy).</td>
     </tr>
     <tr>
-      <td width="50%">Must always provide the namespace as part of the URL.</td>
-      <td width="50%">When sending requests to Services, specifying the namespace is optional.</td>
+      <td width="50%">Must always specify the Service/Pod namespace.</td>
+      <td width="50%">When connecting to a Service, specifying the namespace is optional.</td>
     </tr>
     <tr>
-      <td width="50%">When sending requests to Services, must provide the Service's name.</td>
-      <td width="50%">When sending requests to Services, must provide the Service's name.</td>
+      <td width="50%">When connecting to a Pod, must provide the Pod's name.</td>
+      <td width="50%">When connecting to a Pod, must provide the Pod's IP.</td>
     </tr>
     <tr>
-      <td width="50%">When sending requests to Pods, must provide the Pod's name.</td>
-      <td width="50%">When sending requests to Pods, must provide the Pod's IP.</td>
-    </tr>
-    <tr>
-      <td width="50%">Only needs to be executed once for sending requests to different targets.</td>
-      <td width="50%">Only needs to be executed once for sending requests to different targets.</td>
+      <td width="50%">Does not allow raw TCP connectios.</td>
+      <td width="50%">Allows raw TCP connections via HTTP <code>CONNECT</code>.</td>
     </tr>
   </tbody>
 </table>
@@ -152,28 +154,28 @@ There is some overlap between how kubectl portal/proxy/port-forward can be used 
   </thead>
   <tbody>
     <tr>
-      <td width="50%">Allows local access to any ports of any specific Pod.</td>
-      <td width="50%">Allows local access to endpoints exposed by Services and Pods, plus any host reachable from within the cluster (e.g. a private database, dashboard, etc).</td>
+      <td width="50%">Connect to a Pod.</td>
+      <td width="50%">Connect to Services, Pods, or hosts reachable from within the cluster (e.g. database, dashboard, etc).</td>
     </tr>
     <tr>
-      <td width="50%">Requires the user to send requests to a local address, e.g. <code>http://localhost:6000/my-endpoint</code>.</td>
-      <td width="50%">Requires the user to configure the HTTP client to use the local proxy, and then use a URL such as:<br> <code>http://my-service/my-endpoint</code> (using the currently selected namespace).</td>
+      <td width="50%">URL example:<br><code>http://localhost:6000/my-endpoint</code>.</td>
+      <td width="50%">URL example:<br><code>http://my-service/my-endpoint</code> (with <code>localhost:7070</code> as proxy).</td>
     </tr>
     <tr>
       <td width="50%">Specifying the Pod's namespace is optional.</td>
-      <td width="50%">When sending requests to Services, specifying the namespace is optional.</td>
+      <td width="50%">When connecting to a Service, specifying the namespace is optional.</td>
     </tr>
     <tr>
-      <td width="50%">Does now allow for sending requests to a Service.</td>
-      <td width="50%">When sending requests to Services, must provide the Service's name.</td>
+      <td width="50%">Does not allow for connecting to a Service.</td>
+      <td width="50%">Allows connecting to a Service.</td>
     </tr>
     <tr>
       <td width="50%">Must provide the Pod's name to run the command.</td>
-      <td width="50%">When sending requests to Pods, must provide the Pod's IP.</td>
+      <td width="50%">When connecting to a Pod, must provide the Pod's IP.</td>
     </tr>
     <tr>
-      <td width="50%">Needs to be executed once for each different Pod the user wants to send requests to.</td>
-      <td width="50%">Only needs to be executed once for sending requests to different targets.</td>
+      <td width="50%">Needs to be executed once for each different Pod the user wants to connect to.</td>
+      <td width="50%">Only needs to be executed once for connecting to different targets.</td>
     </tr>
   </tbody>
 </table>
